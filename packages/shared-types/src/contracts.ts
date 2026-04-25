@@ -48,3 +48,28 @@ export interface AnalysisPayload {
   matchedTerms: MatchedTerm[];
   performance: AnalysisPerformance;
 }
+
+export const ESCALATION_MESSAGE_TYPE = 'ESCALATE' as const;
+export type AnalysisSource = 'initial' | 'mutation';
+
+export interface EscalationMessage {
+  type: typeof ESCALATION_MESSAGE_TYPE;
+  payload: AnalysisPayload;
+  source: AnalysisSource;
+  fingerprint: string;
+  pageUrl: string;
+}
+
+export interface EscalationBackendRequest {
+  payload: AnalysisPayload;
+  source: AnalysisSource;
+  fingerprint: string;
+  pageUrl: string;
+  screenshotDataUrl?: string;
+}
+
+export interface EscalationAck {
+  ok: boolean;
+  status?: number;
+  error?: string;
+}
