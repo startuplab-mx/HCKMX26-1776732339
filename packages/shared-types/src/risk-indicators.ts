@@ -19,6 +19,7 @@ const makeRule = (
 
 export const RISK_INDICATOR_RULES: readonly KeywordRule[] = [
   makeRule('illicit-01', 'premio por hacer', 'illicitRewardPromise', 'word', ['te doy premio']),
+  makeRule('illicit-02', 'militante', 'illicitRewardPromise', 'word', ['militar', 'militante', 'soldado']),
   makeRule('mission-01', 'misiones', 'missionRecruitment', 'word', ['mision', 'encargo']),
   makeRule('personal-01', 'en que escuela estudias', 'personalInformation', 'word', ['nombre completo']),
   makeRule('financial-01', 'numero de tarjeta', 'financialData', 'word', ['cvv', 'cuenta bancaria']),
@@ -38,7 +39,11 @@ export const RISK_INDICATOR_RULES: readonly KeywordRule[] = [
   makeRule('hash-05', '#operativamz', 'directThreat', 'hashtag'),
   makeRule('hash-06', '#frasesbelicas', 'directThreat', 'hashtag'),
   makeRule('hash-07', '#ondeado', 'hacksMalwareDownload', 'hashtag'),
-
+  makeRule('hash-08', '#militar', 'illicitRewardPromise', 'hashtag'),
+  makeRule('hash-09', '#soldado', 'illicitRewardPromise', 'hashtag'),
+  makeRule('hash-10', '#militante', 'illicitRewardPromise', 'hashtag'),
+  makeRule('hash-11', '#militar', 'illicitRewardPromise', 'hashtag'),
+  
   makeRule('emoji-01', '🍕', 'missionRecruitment', 'emoji'),
   makeRule('emoji-02', '🐓', 'missionRecruitment', 'emoji'),
   makeRule('emoji-03', '🥷', 'directThreat', 'emoji'),
