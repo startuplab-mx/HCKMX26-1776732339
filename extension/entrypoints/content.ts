@@ -1,5 +1,9 @@
 import {
+  ESCALATION_MESSAGE_TYPE,
   KEYWORD_CATEGORIES,
+  type AnalysisSource,
+  type EscalationAck,
+  type EscalationMessage,
   type AnalysisPayload,
   type KeywordRule,
   type MatchedTerm,
@@ -16,7 +20,10 @@ const DEBOUNCE_MS = 120;
 const INITIAL_SCAN_MAX_TEXT_NODES_PER_CHUNK = 140;
 const MAX_TEXT_CHARS_PER_BATCH = 14_000;
 const MAX_HASH_CACHE_SIZE = 4_000;
+const MAX_ESCALATION_CACHE_SIZE = 400;
+const ESCALATION_MIN_INTERVAL_MS = 15_000;
 const BLOCKED_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
+const ESCALATION_LEVELS = new Set<RiskLevel>(['MEDIUM', 'HIGH', 'CRITICAL']);
 
 type CompiledRuleVariant = {
   rule: KeywordRule;
@@ -25,7 +32,7 @@ type CompiledRuleVariant = {
   needsWordBoundary: boolean;
 };
 
-type BatchSource = 'initial' | 'mutation';
+type BatchSource = AnalysisSource;
 
 type AnalyzeResult = {
   payload: AnalysisPayload | null;
@@ -131,13 +138,25 @@ const buildTextHash = (value: string): string => {
   return `${hash >>> 0}`;
 };
 
+const buildEscalationFingerprint = (payload: AnalysisPayload): string => {
+  // Stable fingerprint used to suppress duplicate escalations for near-identical findings.
+  const termsKey = payload.matchedTerms
+    .map((term) => `${term.ruleId}:${term.count}`)
+    .sort()
+    .join('|');
+  return [payload.url, payload.riskLevel, payload.totalScore.toFixed(2), termsKey].join('::');
+};
+
 export default defineContentScript({
   matches: ['<all_urls>'],
   main() {
+    console.log('[risk-analyzer.init]', { url: window.location.href });
     const compiledVariants = buildCompiledVariants(RISK_INDICATOR_RULES);
     const seenTextHashes = new Set<string>();
     const textHashOrder: string[] = [];
     const pendingRoots = new Set<Element>();
+    const escalationTimestamps = new Map<string, number>();
+    const escalationOrder: string[] = [];
     let mutationTimer: ReturnType<typeof setTimeout> | null = null;
 
     const rememberHash = (hash: string): boolean => {
@@ -276,8 +295,95 @@ export default defineContentScript({
       if (payload.matchedTerms.length > 0 || source === 'initial') {
         console.debug('[risk-analyzer.payload]', payload, { source });
       }
+      console.debug('[risk-analyzer.summary]', {
+        source,
+        nodesScanned,
+        matchedTerms: payload.matchedTerms.length,
+        totalScore: payload.totalScore,
+        riskLevel: payload.riskLevel,
+        truncated,
+      });
+
+      maybeEscalate(payload, source);
 
       return { payload, truncated };
+    };
+
+    const rememberEscalation = (fingerprint: string, now: number): void => {
+      escalationTimestamps.set(fingerprint, now);
+      escalationOrder.push(fingerprint);
+
+      if (escalationOrder.length > MAX_ESCALATION_CACHE_SIZE) {
+        const oldest = escalationOrder.shift();
+        if (oldest) {
+          escalationTimestamps.delete(oldest);
+        }
+      }
+    };
+
+    const shouldEscalate = (payload: AnalysisPayload): boolean =>
+      payload.matchedTerms.length > 0 && ESCALATION_LEVELS.has(payload.riskLevel);
+
+    const maybeEscalate = (payload: AnalysisPayload, source: BatchSource): void => {
+      if (!shouldEscalate(payload)) {
+        return;
+      }
+
+      const now = Date.now();
+      const fingerprint = buildEscalationFingerprint(payload);
+      const lastSentAt = escalationTimestamps.get(fingerprint);
+      // Repeated DOM churn can produce the same signal burst; throttle by fingerprint+time window.
+      if (lastSentAt && now - lastSentAt < ESCALATION_MIN_INTERVAL_MS) {
+        console.debug('[risk-analyzer.escalation.throttled]', {
+          source,
+          fingerprint,
+          elapsedMs: now - lastSentAt,
+          minIntervalMs: ESCALATION_MIN_INTERVAL_MS,
+        });
+        return;
+      }
+
+      rememberEscalation(fingerprint, now);
+      const message: EscalationMessage = {
+        type: ESCALATION_MESSAGE_TYPE,
+        payload,
+        source,
+        fingerprint,
+        pageUrl: window.location.href,
+      };
+      console.log('[risk-analyzer.escalation.send]', {
+        source,
+        fingerprint,
+        riskLevel: payload.riskLevel,
+        totalScore: payload.totalScore,
+      });
+
+      void browser.runtime
+        .sendMessage<EscalationMessage, EscalationAck>(message)
+        .then((ack) => {
+          console.debug('[risk-analyzer.escalation.ack]', {
+            source,
+            fingerprint,
+            ok: Boolean(ack?.ok),
+            status: ack?.status,
+          });
+          if (!ack?.ok) {
+            // Fail-open: keep local scanning active even when escalation transport fails.
+            console.debug('[risk-analyzer.escalation.failed]', {
+              source,
+              fingerprint,
+              status: ack?.status,
+              error: ack?.error ?? 'unknown escalation failure',
+            });
+          }
+        })
+        .catch((error: unknown) => {
+          console.warn('[risk-analyzer.escalation.error]', {
+            source,
+            fingerprint,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
     };
 
     const collectTextsFromElement = (root: Element): { texts: string[]; nodesScanned: number } => {
@@ -349,6 +455,9 @@ export default defineContentScript({
       }
 
       const rootsToAnalyze = Array.from(pendingRoots);
+      console.debug('[risk-analyzer.mutations.flush]', {
+        rootsQueued: rootsToAnalyze.length,
+      });
       pendingRoots.clear();
       analyzeRoots(rootsToAnalyze, 'mutation');
     };
