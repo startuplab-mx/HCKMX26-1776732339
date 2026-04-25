@@ -1,0 +1,50 @@
+import type { KeywordCategory, RiskColor, RiskLevel, Severity } from './risk-categories';
+
+export const SIGNAL_TYPES = ['word', 'hashtag', 'emoji'] as const;
+export type SignalType = (typeof SIGNAL_TYPES)[number];
+
+export interface KeywordRule {
+  id: string;
+  signalType: SignalType;
+  value: string;
+  aliases?: readonly string[];
+  mappedCategory: KeywordCategory;
+  baseSeverity: Severity;
+  confidence: number;
+}
+
+export interface MatchedTerm {
+  ruleId: string;
+  signalType: SignalType;
+  matchedValue: string;
+  normalizedValue: string;
+  category: KeywordCategory;
+  severity: Severity;
+  count: number;
+  scoreContribution: number;
+}
+
+export type CategoryBreakdown = Record<KeywordCategory, number>;
+export type SeverityBreakdown = Record<RiskLevel, number>;
+export type SignalTypeBreakdown = Record<SignalType, number>;
+
+export interface AnalysisPerformance {
+  durationMs: number;
+  truncated: boolean;
+  nodesScanned: number;
+  textCharsScanned: number;
+  batchBudgetMs: number;
+}
+
+export interface AnalysisPayload {
+  timestamp: string;
+  url: string;
+  totalScore: number;
+  riskLevel: RiskLevel;
+  riskColor: RiskColor;
+  occurrencesByCategory: CategoryBreakdown;
+  occurrencesBySeverity: SeverityBreakdown;
+  occurrencesBySignalType: SignalTypeBreakdown;
+  matchedTerms: MatchedTerm[];
+  performance: AnalysisPerformance;
+}
