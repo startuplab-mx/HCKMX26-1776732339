@@ -13,6 +13,7 @@ import {
 const BACKEND_ANALYZE_PATH = '/analyze';
 const SCREENSHOT_QUALITY = 60;
 const SCREENSHOT_MIN_SCORE = 10;
+const ENABLE_BACKEND_NUDGE = import.meta.env.VITE_ENABLE_BACKEND_NUDGE === 'true';
 type RuntimeMessageListener = Parameters<
   typeof browser.runtime.onMessage.addListener
 >[0];
@@ -33,7 +34,7 @@ const maybeCaptureScreenshot = async (
     });
     console.debug('[escalation.capture.success]', {
       tabId: sender.tab?.id,
-      screenshotDataUrl,
+      screenshotSize: screenshotDataUrl.length,
     });
     return screenshotDataUrl;
   } catch (error: unknown) {
@@ -115,10 +116,31 @@ const sendEscalationToBackend = async (
       };
     }
 
-    return {
+    const responseJson = (await response.json().catch(() => null)) as
+      | Partial<EscalationAck>
+      | null;
+
+    const ack: EscalationAck = {
       ok: true,
       status: response.status,
+      traceId: typeof responseJson?.traceId === 'string' ? responseJson.traceId : undefined,
+      pipelineVersion:
+        typeof responseJson?.pipelineVersion === 'string'
+          ? responseJson.pipelineVersion
+          : undefined,
+      analysis: ENABLE_BACKEND_NUDGE ? responseJson?.analysis : undefined,
     };
+
+    if (ENABLE_BACKEND_NUDGE && ack.analysis?.nudge) {
+      console.info('[escalation.nudge.received]', {
+        fingerprint: message.fingerprint,
+        category: ack.analysis.category,
+        severity: ack.analysis.severity,
+        traceId: ack.traceId,
+      });
+    }
+
+    return ack;
   } catch (error: unknown) {
     console.error('[escalation.request.error]', {
       fingerprint: message.fingerprint,
