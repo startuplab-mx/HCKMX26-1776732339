@@ -12,8 +12,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-}
+  gap: 16px; 
+  border-radius: 36px;
+} 
 
 .logoAnimatedSmall {
   width: 250px;
@@ -21,23 +22,40 @@
 }
 
 .primaryButton {
-  appearance: none;
-  border: 0;
-  border-radius: 12px;
-  padding: 10px 14px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 200;
+  font-color: #184C5A;
+  letter-spacing: 1px;
+  padding: 13px 20px 13px;
+  outline: 0;
+  border: 1px solid #184C5A;
+  opacity:0.8;
   cursor: pointer;
-  color: #0b0b0b;
-  background: #f2f2f2;
+  position: relative;
+  background-color: #ECFFC0;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
 }
 
-.primaryButton:hover {
-  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.18));
+.primaryButton:after {
+  content: "";
+  background-color: #184C5A;
+  width: 100%;
+  z-index: -1;
+  position: absolute;
+  height: 100%;
+  top: 7px;
+  left: 7px;
+  transition: 0.2s;
 }
 
-.primaryButton:active {
-  transform: translateY(1px);
+.primaryButton:hover:after {
+  top: 0px;
+  left: 0px;
+  box-shadow: inset 0 0 4px 5px rgba(0, 0, 0, 0.3);
 }
+
 
 @keyframes lumi-bounce {
   0%,

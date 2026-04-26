@@ -1,0 +1,185 @@
+.dash {
+  min-height: 100vh;
+  padding: 22px 22px 28px;
+}
+
+.dashHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.dashTitle {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.dashMeta {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 14px;
+}
+
+.panel {
+  background: rgba(198, 225, 227, 0.08);
+  border: 1px solid rgba(198, 225, 227, 0.18);
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.panelTitle {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kpi {
+  background: rgba(236, 255, 192, 0.06);
+  border: 1px solid rgba(236, 255, 192, 0.12);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.kpiLabel {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.kpiValue {
+  margin: 6px 0 0;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.kpiSub {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.chartRows {
+  display: grid;
+  gap: 10px;
+}
+
+.chartRow {
+  display: grid;
+  grid-template-columns: 86px 1fr 46px;
+  align-items: center;
+  gap: 10px;
+}
+
+.chartLabel {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.barTrack {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.barFillLow {
+  background: var(--c-lime);
+}
+
+.barFillMed {
+  background: #c6e1e3;
+}
+
+.barFillHigh {
+  background: var(--c-coral);
+}
+
+.list {
+  display: grid;
+  gap: 10px;
+}
+
+.item {
+  display: grid;
+  gap: 2px;
+  padding: 10px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.itemTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.itemTitle {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.pill {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.pillHigh {
+  border-color: rgba(248, 135, 86, 0.5);
+  background: rgba(248, 135, 86, 0.12);
+}
+
+.pillMed {
+  border-color: rgba(198, 225, 227, 0.45);
+  background: rgba(198, 225, 227, 0.12);
+}
+
+.pillLow {
+  border-color: rgba(236, 255, 192, 0.4);
+  background: rgba(236, 255, 192, 0.12);
+}
+
+.itemSub {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 980px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

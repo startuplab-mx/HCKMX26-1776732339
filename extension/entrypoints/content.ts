@@ -26,6 +26,9 @@ const RISK_OVERLAY_ID = 'lumihover-risk-overlay-root';
 
 const HERO_IDLE_GIF_PATH = '/gifs/hero-idle.gif' as const;
 const HERO_HOVER_GIF_PATH = '/gifs/hero-hover.gif' as const;
+const HERO_DRAG_GIF_PATH = '/gifs/dancinLUMI.gif' as const;
+
+const HERO_POS_STORAGE_KEY = 'lumihover.hero.pos.v1';
 
 const RISK_MEDIUM_GIF_PATH = '/gifs/risk-medium.gif' as const;
 const RISK_HIGH_GIF_PATH = '/gifs/risk-high.gif' as const;
@@ -97,21 +100,24 @@ const mountLumiOverlay = (): void => {
   const root = document.createElement('div');
   root.id = LUMI_OVERLAY_ID;
   root.style.position = 'fixed';
-  // Very tight to the viewport edge (outside the extension popup)
+  // Default: bottom-right, but user can drag to reposition.
+  root.style.left = 'auto';
+  root.style.top = 'auto';
   root.style.right = '4px';
-  root.style.bottom = '4px';
+  root.style.bottom = '80px';
   root.style.zIndex = '2147483647';
   root.style.pointerEvents = 'none';
 
   const hero = document.createElement('img');
   hero.alt = 'LumiHover';
-  hero.style.width = '220px';
+  hero.style.width = '90px';
   hero.style.height = 'auto';
   hero.style.pointerEvents = 'auto';
   hero.style.userSelect = 'none';
   hero.style.webkitUserSelect = 'none';
   hero.style.cursor = 'pointer';
   hero.style.display = 'block';
+  hero.style.touchAction = 'none';
 
   // Hover bounce (CSS-like) using WAAPI so we don't need to inject styles.
   const bounce = () =>
@@ -127,18 +133,91 @@ const mountLumiOverlay = (): void => {
   let hoverAnimation: Animation | null = null;
   const idleUrl = browser.runtime.getURL(HERO_IDLE_GIF_PATH as any);
   const hoverUrl = browser.runtime.getURL(HERO_HOVER_GIF_PATH as any);
+  const dragUrl = browser.runtime.getURL(HERO_DRAG_GIF_PATH as any);
 
   hero.src = idleUrl;
 
+  let isDragging = false;
+
   hero.addEventListener('mouseenter', () => {
+    if (isDragging) return;
     hero.src = hoverUrl;
     hoverAnimation = bounce();
   });
 
   hero.addEventListener('mouseleave', () => {
+    if (isDragging) return;
     hoverAnimation?.cancel();
     hoverAnimation = null;
     hero.src = idleUrl;
+  });
+
+  // Restore saved position (if any)
+  try {
+    const raw = localStorage.getItem(HERO_POS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { left?: number; top?: number };
+      if (typeof parsed.left === 'number' && typeof parsed.top === 'number') {
+        root.style.left = `${parsed.left}px`;
+        root.style.top = `${parsed.top}px`;
+        root.style.right = 'auto';
+        root.style.bottom = 'auto';
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // Drag to reposition (pointer events)
+  hero.addEventListener('pointerdown', (e) => {
+    isDragging = true;
+    hoverAnimation?.cancel();
+    hoverAnimation = null;
+    hero.src = dragUrl;
+    hero.setPointerCapture(e.pointerId);
+
+    const rect = root.getBoundingClientRect();
+    const startPointerX = e.clientX;
+    const startPointerY = e.clientY;
+    const startLeft = rect.left;
+    const startTop = rect.top;
+
+    const onMove = (ev: PointerEvent) => {
+      if (!isDragging) return;
+      const dx = ev.clientX - startPointerX;
+      const dy = ev.clientY - startPointerY;
+      const nextLeft = Math.max(0, Math.min(window.innerWidth - rect.width, startLeft + dx));
+      const nextTop = Math.max(0, Math.min(window.innerHeight - rect.height, startTop + dy));
+
+      root.style.left = `${nextLeft}px`;
+      root.style.top = `${nextTop}px`;
+      root.style.right = 'auto';
+      root.style.bottom = 'auto';
+    };
+
+    const onUp = (ev: PointerEvent) => {
+      isDragging = false;
+      hero.releasePointerCapture(ev.pointerId);
+
+      const finalRect = root.getBoundingClientRect();
+      try {
+        localStorage.setItem(
+          HERO_POS_STORAGE_KEY,
+          JSON.stringify({ left: Math.round(finalRect.left), top: Math.round(finalRect.top) }),
+        );
+      } catch {
+        // ignore
+      }
+
+      hero.src = idleUrl;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
   });
 
   root.appendChild(hero);

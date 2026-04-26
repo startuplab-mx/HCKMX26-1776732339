@@ -131,6 +131,126 @@ const sendEscalationToBackend = async (
   }
 };
 
+type SeverityKey = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+type DashboardState = {
+  todayOccurrences: number;
+  weekOccurrences: number;
+  avgPerDay: number;
+  onlineMinutesToday: number;
+  limitHours: number;
+  activeAlerts: number;
+  needReview: number;
+  occurrencesBySeverity: Record<SeverityKey, number>;
+  recentAlerts: Array<{ ts: string; url: string; risk: SeverityKey; totalScore: number }>;
+  recentSites: Array<{ host: string; count: number }>;
+  recentUsers: Array<{ label: string; count: number }>;
+  // internal
+  _daily: Record<string, number>;
+  _sites: Record<string, number>;
+};
+
+const DASHBOARD_KEY = 'lumihover.dashboard.v1';
+
+const isoDate = (d = new Date()): string => d.toISOString().slice(0, 10);
+
+const last7Days = (): string[] => {
+  const days: string[] = [];
+  const now = new Date();
+  for (let i = 0; i < 7; i += 1) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    days.push(isoDate(d));
+  }
+  return days;
+};
+
+const defaultDashboardState = (): DashboardState => ({
+  todayOccurrences: 0,
+  weekOccurrences: 0,
+  avgPerDay: 0,
+  onlineMinutesToday: 0,
+  limitHours: 2,
+  activeAlerts: 0,
+  needReview: 0,
+  occurrencesBySeverity: { LOW: 0, MEDIUM: 0, HIGH: 0, CRITICAL: 0 },
+  recentAlerts: [],
+  recentSites: [],
+  recentUsers: [],
+  _daily: {},
+  _sites: {},
+});
+
+const updateDashboardFromEscalation = async (message: EscalationMessage): Promise<void> => {
+  const stored = await browser.storage.local.get(DASHBOARD_KEY);
+  const state: DashboardState = (stored[DASHBOARD_KEY] as DashboardState) ?? defaultDashboardState();
+
+  const dayKey = isoDate(new Date(message.payload.timestamp));
+  state._daily[dayKey] = (state._daily[dayKey] ?? 0) + 1;
+
+  const url = message.payload.url || message.pageUrl;
+  let host = '';
+  try {
+    host = new URL(url).host;
+  } catch {
+    host = url.slice(0, 80);
+  }
+  if (host) {
+    state._sites[host] = (state._sites[host] ?? 0) + 1;
+  }
+
+  const risk = message.payload.riskLevel as SeverityKey;
+  if (risk in state.occurrencesBySeverity) {
+    state.occurrencesBySeverity[risk] += 1;
+  }
+
+  // Recent alerts list (keep only 20)
+  state.recentAlerts.unshift({
+    ts: message.payload.timestamp,
+    url,
+    risk,
+    totalScore: message.payload.totalScore,
+  });
+  state.recentAlerts = state.recentAlerts.slice(0, 20);
+
+  // Derived KPIs
+  const todayKey = isoDate();
+  state.todayOccurrences = state._daily[todayKey] ?? 0;
+
+  const weekKeys = last7Days();
+  state.weekOccurrences = weekKeys.reduce((acc, k) => acc + (state._daily[k] ?? 0), 0);
+  state.avgPerDay = Math.round(state.weekOccurrences / 7);
+
+  state.activeAlerts = state.recentAlerts.filter((a) => a.risk === 'HIGH' || a.risk === 'CRITICAL').length;
+  state.needReview = state.recentAlerts.filter((a) => a.risk === 'MEDIUM' || a.risk === 'HIGH' || a.risk === 'CRITICAL').length;
+
+  // Recent sites (top counts)
+  state.recentSites = Object.entries(state._sites)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12)
+    .map(([h, c]) => ({ host: h, count: c }));
+
+  // v0 placeholder from keywords (top matched terms shown as "users")
+  // This is intentionally rough until we add real "interaction" extraction.
+  const topTerms = message.payload.matchedTerms
+    .slice()
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5)
+    .map((t) => t.matchedValue);
+  if (topTerms.length) {
+    const merged = new Map(state.recentUsers.map((u) => [u.label, u.count]));
+    for (const term of topTerms) {
+      merged.set(term, (merged.get(term) ?? 0) + 1);
+    }
+    state.recentUsers = Array.from(merged.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([label, count]) => ({ label, count }));
+  }
+
+  await browser.storage.local.set({ [DASHBOARD_KEY]: state });
+};
+
 export default defineBackground(() => {
   console.log('Background ready', { id: browser.runtime.id });
 
@@ -139,6 +259,7 @@ export default defineBackground(() => {
       return undefined;
     }
 
+    void updateDashboardFromEscalation(message);
     return sendEscalationToBackend(message, sender);
   });
 });

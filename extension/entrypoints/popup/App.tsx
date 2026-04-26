@@ -4,8 +4,7 @@ function App() {
   const logoSrc = '/gifs/logo.gif';
 
   const openParentalControls = () => {
-    // TODO: replace with your real parental controls destination
-    const url = 'https://families.google.com/familylink/';
+    const url = browser.runtime.getURL('/dashboard.html' as any);
     void browser.tabs.create({ url });
   };
 
