@@ -5,6 +5,54 @@
   text-align: center;
 }
 
+.popup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.lumiTitle {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  cursor: default;
+  display: inline-block;
+}
+
+@keyframes lumi-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.heroAnimated:hover {
+  animation: lumi-bounce 650ms ease-in-out infinite;
+}
+
+.logos {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.heroAnimated {
+  width: 220px;
+  height: auto;
+}
+
+.logoAnimatedSmall {
+  width: 110px;
+  height: auto;
+}
+
 .logo {
   height: 6em;
   padding: 1.5em;
