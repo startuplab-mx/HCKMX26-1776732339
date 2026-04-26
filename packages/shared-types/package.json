@@ -1,8 +1,14 @@
 {
-  "name": "@hck/shared-types",
-  "private": true,
-  "version": "0.0.0",
+  "name": "@emmanuelbalderasb/shared-types",
+  "private": false,
+  "version": "0.1.0",
   "type": "module",
   "main": "./src/index.ts",
-  "types": "./src/index.ts"
+  "types": "./src/index.ts",
+  "files": [
+    "src"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
 }
