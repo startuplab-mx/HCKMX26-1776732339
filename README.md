@@ -247,9 +247,12 @@ The following items may exist in product vision docs, but are not implemented he
 ## 9) Operational notes
 
 - Extension networking requires `VITE_BACKEND_URL` configured at build/runtime.
+- Optional extension gate `VITE_ENABLE_BACKEND_NUDGE=true` enables consumption/logging of backend `analysis.nudge` fields.
 - Current popup is non-production scaffold and independent of analyzer state.
 - Content script is intentionally fail-open: analysis continues even if backend calls fail.
 - CSP in `wxt.config.ts` currently permits `img-src` for UploadThing CDN hosts on extension pages.
+- Backend defaults to `PORT=3000` and supports `GET /health`, `POST /analyze`, and `GET /metrics`.
+- Backend enrichment uses `OPENROUTER_API_KEY` (+ optional `LLM_MODEL` / `VISION_MODEL`) and optional persistence via `SUPABASE_URL` + `SUPABASE_ANON_KEY`.
 
 ---
 
@@ -257,8 +260,8 @@ The following items may exist in product vision docs, but are not implemented he
 
 If the goal is full LUMI behavior, next concrete additions would be:
 
-1. Add backend response schema for actionable intervention payload (nudge text + severity + rationale).
-2. Add typed background->content message (`SHOW_NUDGE`) and content listener.
-3. Implement nudge renderer module with isolated styles and dedupe.
-4. Add local event persistence + popup state bound to analyzer outcomes.
-5. Add test fixtures for scoring, escalation throttling, and contract compatibility.
+1. Add typed background->content message (`SHOW_NUDGE`) and content listener.
+2. Implement nudge renderer module with isolated styles and dedupe.
+3. Add local event persistence + popup state bound to analyzer outcomes.
+4. Add provider circuit-breaker state with temporary disable windows.
+5. Add end-to-end load tests for enrichment latency and persistence durability.
