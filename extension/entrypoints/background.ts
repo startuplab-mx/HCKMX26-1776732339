@@ -4,32 +4,19 @@ import {
   type EscalationBackendRequest,
   type EscalationMessage,
 } from '@shared';
+import {
+  isEscalationMessage,
+  normalizeBackendUrl,
+  shouldCaptureScreenshot,
+} from '../utils/background-helpers';
 
 const BACKEND_ANALYZE_PATH = '/analyze';
 const SCREENSHOT_QUALITY = 60;
 const SCREENSHOT_MIN_SCORE = 10;
-type RuntimeMessageListener = Parameters<typeof browser.runtime.onMessage.addListener>[0];
+type RuntimeMessageListener = Parameters<
+  typeof browser.runtime.onMessage.addListener
+>[0];
 type MessageSender = Parameters<RuntimeMessageListener>[1];
-
-const normalizeBackendUrl = (value: string | undefined): string | null => {
-  if (!value) {
-    return null;
-  }
-  return value.trim().replace(/\/+$/, '') || null;
-};
-
-const isEscalationMessage = (value: unknown): value is EscalationMessage => {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-  return (value as { type?: unknown }).type === ESCALATION_MESSAGE_TYPE;
-};
-
-const shouldCaptureScreenshot = (message: EscalationMessage): boolean =>
-  // Capture only for higher-risk events to reduce cost and avoid unnecessary image collection.
-  message.payload.totalScore >= SCREENSHOT_MIN_SCORE ||
-  message.payload.riskLevel === 'HIGH' ||
-  message.payload.riskLevel === 'CRITICAL';
 
 const maybeCaptureScreenshot = async (
   sender: MessageSender,
@@ -40,10 +27,15 @@ const maybeCaptureScreenshot = async (
   }
 
   try {
-    return await browser.tabs.captureVisibleTab(windowId, {
+    const screenshotDataUrl = await browser.tabs.captureVisibleTab(windowId, {
       format: 'jpeg',
       quality: SCREENSHOT_QUALITY,
     });
+    console.debug('[escalation.capture.success]', {
+      tabId: sender.tab?.id,
+      screenshotDataUrl,
+    });
+    return screenshotDataUrl;
   } catch (error: unknown) {
     console.warn('[escalation.capture.failed]', {
       tabId: sender.tab?.id,
@@ -76,12 +68,14 @@ const sendEscalationToBackend = async (
     };
   }
 
-  const captureScreenshot = shouldCaptureScreenshot(message);
+  const captureScreenshot = shouldCaptureScreenshot(message, SCREENSHOT_MIN_SCORE);
   console.debug('[escalation.capture.decision]', {
     fingerprint: message.fingerprint,
     captureScreenshot,
   });
-  const screenshotDataUrl = captureScreenshot ? await maybeCaptureScreenshot(sender) : undefined;
+  const screenshotDataUrl = captureScreenshot
+    ? await maybeCaptureScreenshot(sender)
+    : undefined;
 
   const requestBody: EscalationBackendRequest = {
     payload: message.payload,
@@ -116,7 +110,8 @@ const sendEscalationToBackend = async (
       return {
         ok: false,
         status: response.status,
-        error: responseBody.slice(0, 180) || `Backend returned ${response.status}`,
+        error:
+          responseBody.slice(0, 180) || `Backend returned ${response.status}`,
       };
     }
 
@@ -140,7 +135,7 @@ export default defineBackground(() => {
   console.log('Background ready', { id: browser.runtime.id });
 
   browser.runtime.onMessage.addListener((message: unknown, sender) => {
-    if (!isEscalationMessage(message)) {
+    if (!isEscalationMessage(message, ESCALATION_MESSAGE_TYPE)) {
       return undefined;
     }
 

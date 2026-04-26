@@ -1,6 +1,5 @@
 import {
   ESCALATION_MESSAGE_TYPE,
-  KEYWORD_CATEGORIES,
   type AnalysisSource,
   type EscalationAck,
   type EscalationMessage,
@@ -9,10 +8,18 @@ import {
   type MatchedTerm,
   type RiskLevel,
   RISK_INDICATOR_RULES,
-  RISK_LEVELS,
-  SIGNAL_TYPES,
   riskLevelToColor,
 } from '@shared';
+import {
+  buildCompiledVariants,
+  buildEscalationFingerprint,
+  buildTextHash,
+  buildZeroCategoryBreakdown,
+  buildZeroSeverityBreakdown,
+  buildZeroSignalBreakdown,
+  countOccurrences,
+  normalizeText,
+} from '../utils/content-helpers';
 
 const LUMI_OVERLAY_ID = 'lumihover-overlay-root';
 const RISK_OVERLAY_ID = 'lumihover-risk-overlay-root';
@@ -78,6 +85,10 @@ const showRiskOverlay = (riskLevel: RiskLevel): void => {
   });
 };
 
+/**
+ * Mounts a floating "LumiHover" iframe in the bottom-right corner of the page.
+ * The iframe toggles between still/animated assets on hover and runs a subtle bounce.
+ */
 const mountLumiOverlay = (): void => {
   if (document.getElementById(LUMI_OVERLAY_ID)) {
     return;
@@ -134,10 +145,11 @@ const mountLumiOverlay = (): void => {
   document.documentElement.appendChild(root);
 };
 
-const ANALYSIS_BUDGET_MS = 50;
-const EARLY_STOP_MS = 40;
-const DEBOUNCE_MS = 120;
-const INITIAL_SCAN_MAX_TEXT_NODES_PER_CHUNK = 140;
+// Analysis settings
+const ANALYSIS_BUDGET_MS = 80;
+const EARLY_STOP_MS = 60;
+const DEBOUNCE_MS = 180;
+const INITIAL_SCAN_MAX_TEXT_NODES_PER_CHUNK = 150;
 const MAX_TEXT_CHARS_PER_BATCH = 14_000;
 const MAX_HASH_CACHE_SIZE = 4_000;
 const MAX_ESCALATION_CACHE_SIZE = 400;
@@ -145,13 +157,7 @@ const ESCALATION_MIN_INTERVAL_MS = 15_000;
 const BLOCKED_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
 const ESCALATION_LEVELS = new Set<RiskLevel>(['MEDIUM', 'HIGH', 'CRITICAL']);
 
-type CompiledRuleVariant = {
-  rule: KeywordRule;
-  normalizedNeedle: string;
-  signalType: KeywordRule['signalType'];
-  needsWordBoundary: boolean;
-};
-
+// Analysis types
 type BatchSource = AnalysisSource;
 
 type AnalyzeResult = {
@@ -165,110 +171,12 @@ type MatchAccumulator = {
   count: number;
 };
 
-const normalizeText = (value: string): string =>
-  value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-const isBoundaryChar = (value: string | undefined): boolean =>
-  !value || !/[\p{L}\p{N}_]/u.test(value);
-
-const countOccurrences = (
-  source: string,
-  needle: string,
-  needsWordBoundary: boolean,
-): number => {
-  if (!needle) {
-    return 0;
-  }
-
-  let count = 0;
-  let fromIndex = 0;
-
-  while (fromIndex < source.length) {
-    const matchIndex = source.indexOf(needle, fromIndex);
-    if (matchIndex < 0) {
-      break;
-    }
-
-    const endsAt = matchIndex + needle.length;
-    const isBoundaryMatch =
-      !needsWordBoundary ||
-      (isBoundaryChar(source[matchIndex - 1]) && isBoundaryChar(source[endsAt]));
-
-    if (isBoundaryMatch) {
-      count += 1;
-    }
-
-    fromIndex = endsAt;
-  }
-
-  return count;
-};
-
-const buildCompiledVariants = (rules: readonly KeywordRule[]): CompiledRuleVariant[] => {
-  const compiled: CompiledRuleVariant[] = [];
-
-  for (const rule of rules) {
-    const values = new Set<string>([rule.value, ...(rule.aliases ?? [])]);
-    for (const value of values) {
-      const normalizedNeedle = normalizeText(value);
-      if (!normalizedNeedle) {
-        continue;
-      }
-
-      compiled.push({
-        rule,
-        normalizedNeedle,
-        signalType: rule.signalType,
-        needsWordBoundary: rule.signalType !== 'emoji',
-      });
-    }
-  }
-
-  return compiled;
-};
-
-const buildZeroCategoryBreakdown = (): AnalysisPayload['occurrencesByCategory'] =>
-  KEYWORD_CATEGORIES.reduce(
-    (acc, category) => ({ ...acc, [category]: 0 }),
-    {} as AnalysisPayload['occurrencesByCategory'],
-  );
-
-const buildZeroSeverityBreakdown = (): AnalysisPayload['occurrencesBySeverity'] =>
-  RISK_LEVELS.reduce(
-    (acc, severity) => ({ ...acc, [severity]: 0 }),
-    {} as AnalysisPayload['occurrencesBySeverity'],
-  );
-
-const buildZeroSignalBreakdown = (): AnalysisPayload['occurrencesBySignalType'] =>
-  SIGNAL_TYPES.reduce(
-    (acc, signalType) => ({ ...acc, [signalType]: 0 }),
-    {} as AnalysisPayload['occurrencesBySignalType'],
-  );
-
-const buildTextHash = (value: string): string => {
-  let hash = 5381;
-  for (let i = 0; i < value.length; i += 1) {
-    hash = (hash * 33) ^ value.charCodeAt(i);
-  }
-  return `${hash >>> 0}`;
-};
-
-const buildEscalationFingerprint = (payload: AnalysisPayload): string => {
-  // Stable fingerprint used to suppress duplicate escalations for near-identical findings.
-  const termsKey = payload.matchedTerms
-    .map((term) => `${term.ruleId}:${term.count}`)
-    .sort()
-    .join('|');
-  return [payload.url, payload.riskLevel, payload.totalScore.toFixed(2), termsKey].join('::');
-};
-
 export default defineContentScript({
   matches: ['<all_urls>'],
+  /**
+   * Initializes page scanning and mutation monitoring for risk signals.
+   * Work is chunked/debounced to keep page impact low on dynamic sites.
+   */
   main() {
     console.log('[risk-analyzer.init]', { url: window.location.href });
     mountLumiOverlay();
@@ -315,6 +223,7 @@ export default defineContentScript({
           scannedChars > MAX_TEXT_CHARS_PER_BATCH ||
           performance.now() - startedAt > EARLY_STOP_MS
         ) {
+          // Hard cap prevents long batches from monopolizing the main thread.
           truncated = true;
           break;
         }
@@ -385,6 +294,7 @@ export default defineContentScript({
       totalScore += occurrencesBySeverity.HIGH * 2;
       totalScore += occurrencesBySeverity.CRITICAL * 4;
 
+      // Severity is based on both weighted score and explicit high-severity hits.
       const riskLevel: RiskLevel =
         occurrencesBySeverity.CRITICAL > 0 || totalScore >= 16
           ? 'CRITICAL'
@@ -444,9 +354,17 @@ export default defineContentScript({
     };
 
     const shouldEscalate = (payload: AnalysisPayload): boolean =>
-      payload.matchedTerms.length > 0 && ESCALATION_LEVELS.has(payload.riskLevel);
+      payload.matchedTerms.length > 0 &&
+      ESCALATION_LEVELS.has(payload.riskLevel);
 
-    const maybeEscalate = (payload: AnalysisPayload, source: BatchSource): void => {
+    /**
+     * Sends high-signal findings to the extension runtime.
+     * Repeated near-identical escalations are throttled by a stable fingerprint.
+     */
+    const maybeEscalate = (
+      payload: AnalysisPayload,
+      source: BatchSource,
+    ): void => {
       if (!shouldEscalate(payload)) {
         return;
       }
@@ -508,31 +426,29 @@ export default defineContentScript({
         });
     };
 
-    const collectTextsFromElement = (root: Element): { texts: string[]; nodesScanned: number } => {
+    const collectTextsFromElement = (
+      root: Element,
+    ): { texts: string[]; nodesScanned: number } => {
       if (BLOCKED_TAGS.has(root.tagName)) {
         return { texts: [], nodesScanned: 0 };
       }
 
       const texts: string[] = [];
       let nodesScanned = 0;
-      const walker = document.createTreeWalker(
-        root,
-        NodeFilter.SHOW_TEXT,
-        {
-          acceptNode(node) {
-            const parentElement = node.parentElement;
-            if (!parentElement || BLOCKED_TAGS.has(parentElement.tagName)) {
-              return NodeFilter.FILTER_REJECT;
-            }
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          const parentElement = node.parentElement;
+          if (!parentElement || BLOCKED_TAGS.has(parentElement.tagName)) {
+            return NodeFilter.FILTER_REJECT;
+          }
 
-            if (!node.textContent?.trim()) {
-              return NodeFilter.FILTER_REJECT;
-            }
+          if (!node.textContent?.trim()) {
+            return NodeFilter.FILTER_REJECT;
+          }
 
-            return NodeFilter.FILTER_ACCEPT;
-          },
+          return NodeFilter.FILTER_ACCEPT;
         },
-      );
+      });
 
       let cursor: Node | null = walker.nextNode();
       while (cursor) {
@@ -547,7 +463,10 @@ export default defineContentScript({
       return { texts, nodesScanned };
     };
 
-    const analyzeRoots = (roots: Iterable<Element>, source: BatchSource): void => {
+    const analyzeRoots = (
+      roots: Iterable<Element>,
+      source: BatchSource,
+    ): void => {
       const normalizedTexts: string[] = [];
       let nodesScanned = 0;
 
@@ -594,30 +513,30 @@ export default defineContentScript({
       }, DEBOUNCE_MS);
     };
 
+    /**
+     * Performs an initial document pass in small chunks so first-load analysis
+     * can start early without blocking long pages.
+     */
     const scanInitialDocument = (): void => {
       const target = document.body;
       if (!target) {
         return;
       }
 
-      const walker = document.createTreeWalker(
-        target,
-        NodeFilter.SHOW_TEXT,
-        {
-          acceptNode(node) {
-            const parentElement = node.parentElement;
-            if (!parentElement || BLOCKED_TAGS.has(parentElement.tagName)) {
-              return NodeFilter.FILTER_REJECT;
-            }
+      const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT, {
+        acceptNode(node: Node): number {
+          const parentElement = node.parentElement;
+          if (!parentElement || BLOCKED_TAGS.has(parentElement.tagName)) {
+            return NodeFilter.FILTER_REJECT;
+          }
 
-            if (!node.textContent?.trim()) {
-              return NodeFilter.FILTER_REJECT;
-            }
+          if (!node.textContent?.trim()) {
+            return NodeFilter.FILTER_REJECT;
+          }
 
-            return NodeFilter.FILTER_ACCEPT;
-          },
+          return NodeFilter.FILTER_ACCEPT;
         },
-      );
+      });
 
       const runChunk = (): void => {
         const chunkStartedAt = performance.now();
@@ -647,6 +566,7 @@ export default defineContentScript({
             nodesScanned >= INITIAL_SCAN_MAX_TEXT_NODES_PER_CHUNK ||
             performance.now() - chunkStartedAt > EARLY_STOP_MS
           ) {
+            // Yield frequently to keep UI responsive during startup scans.
             break;
           }
         }
