@@ -68,8 +68,30 @@ export interface EscalationBackendRequest {
   screenshotDataUrl?: string;
 }
 
+export const ANALYSIS_CATEGORIES = [
+  'safe',
+  'grooming',
+  'scam',
+  'threat',
+  'selfHarm',
+  'sexualRisk',
+  'other',
+] as const;
+export type AnalysisCategory = (typeof ANALYSIS_CATEGORIES)[number];
+
+export interface EscalationAnalysis {
+  category: AnalysisCategory;
+  severity: RiskLevel;
+  confidence: number;
+  nudge: string;
+  visionSummary?: string;
+}
+
 export interface EscalationAck {
   ok: boolean;
   status?: number;
   error?: string;
+  analysis?: EscalationAnalysis;
+  traceId?: string;
+  pipelineVersion?: string;
 }
