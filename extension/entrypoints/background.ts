@@ -13,7 +13,7 @@ import {
 const BACKEND_ANALYZE_PATH = '/analyze';
 const SCREENSHOT_QUALITY = 60;
 const SCREENSHOT_MIN_SCORE = 10;
-const ENABLE_BACKEND_NUDGE = import.meta.env.VITE_ENABLE_BACKEND_NUDGE === 'true';
+const ENABLE_BACKEND_NUDGE = true;
 type RuntimeMessageListener = Parameters<
   typeof browser.runtime.onMessage.addListener
 >[0];
