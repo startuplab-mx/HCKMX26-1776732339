@@ -7,7 +7,7 @@ export default defineConfig({
       // Allow images from UploadThing's CDN domains.
       // Replace/add your own CDN host(s) here if different.
       extension_pages:
-        "script-src 'self'; object-src 'self'; img-src 'self' data: https://utfs.io https://*.ufs.sh;",
+        "script-src 'self'; object-src 'self'; img-src 'self' data: https://utfs.io https://*.ufs.sh; frame-src https://utfs.io https://*.ufs.sh;",
     },
   },
 });

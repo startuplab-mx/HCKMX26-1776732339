@@ -14,6 +14,75 @@ import {
   riskLevelToColor,
 } from '@shared';
 
+const LUMI_OVERLAY_ID = 'lumihover-overlay-root';
+
+const HERO_STILL_URL =
+  'https://fhcznf55bc.ufs.sh/f/xBOsIwq3IZNgvmGZCQcnJ8kcASMhKDNE0Vly7aTGUo5f41pO';
+const HERO_ANIMATED_URL =
+  'https://fhcznf55bc.ufs.sh/f/xBOsIwq3IZNgvmGZCQcnJ8kcASMhKDNE0Vly7aTGUo5f41pO';
+
+const mountLumiOverlay = (): void => {
+  if (document.getElementById(LUMI_OVERLAY_ID)) {
+    return;
+  }
+
+  const root = document.createElement('div');
+  root.id = LUMI_OVERLAY_ID;
+  root.style.position = 'fixed';
+  root.style.right = '16px';
+  root.style.bottom = '16px';
+  root.style.zIndex = '2147483647';
+  root.style.pointerEvents = 'none';
+
+  const heroFrame = document.createElement('iframe');
+  heroFrame.title = 'LumiHover';
+  heroFrame.style.width = '220px';
+  heroFrame.style.height = '220px';
+  heroFrame.style.border = '0';
+  heroFrame.style.background = 'transparent';
+  heroFrame.style.pointerEvents = 'auto';
+  heroFrame.style.userSelect = 'none';
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (heroFrame.style as any).webkitUserSelect = 'none';
+  heroFrame.style.cursor = 'pointer';
+
+  // Hover bounce (CSS-like) using WAAPI so we don't need to inject styles.
+  const bounce = () =>
+    heroFrame.animate(
+      [
+        { transform: 'translateY(0px)' },
+        { transform: 'translateY(-8px)' },
+        { transform: 'translateY(0px)' },
+      ],
+      { duration: 650, easing: 'ease-in-out', iterations: Infinity },
+    );
+
+  let hoverAnimation: Animation | null = null;
+  let hoverNonce = 0;
+
+  const setHeroSrc = (baseUrl: string) => {
+    hoverNonce += 1;
+    heroFrame.src = `${baseUrl}?h=${hoverNonce}`;
+  };
+
+  // Default: still
+  setHeroSrc(HERO_STILL_URL);
+
+  heroFrame.addEventListener('mouseenter', () => {
+    setHeroSrc(HERO_ANIMATED_URL);
+    hoverAnimation = bounce();
+  });
+
+  heroFrame.addEventListener('mouseleave', () => {
+    hoverAnimation?.cancel();
+    hoverAnimation = null;
+    setHeroSrc(HERO_STILL_URL);
+  });
+
+  root.appendChild(heroFrame);
+  document.documentElement.appendChild(root);
+};
+
 const ANALYSIS_BUDGET_MS = 50;
 const EARLY_STOP_MS = 40;
 const DEBOUNCE_MS = 120;
@@ -151,6 +220,7 @@ export default defineContentScript({
   matches: ['<all_urls>'],
   main() {
     console.log('[risk-analyzer.init]', { url: window.location.href });
+    mountLumiOverlay();
     const compiledVariants = buildCompiledVariants(RISK_INDICATOR_RULES);
     const seenTextHashes = new Set<string>();
     const textHashOrder: string[] = [];

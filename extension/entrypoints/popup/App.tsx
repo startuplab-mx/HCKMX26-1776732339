@@ -1,25 +1,24 @@
+import { useMemo } from 'preact/hooks';
 import './App.css';
 
 function App() {
+  const logoAnimatedUrl =
+    'https://fhcznf55bc.ufs.sh/f/xBOsIwq3IZNgx3VFjIq3IZNgozUprDwMlXAWE5tQPbSFq6Om';
+
+  // Force the logo to "start fresh" on initial mount
+  const logoSrc = useMemo(
+    () => `${logoAnimatedUrl}?v=${Date.now()}`,
+    [logoAnimatedUrl],
+  );
+
   return (
     <>
       <main className="popup">
-        <div className="logos">
-          <img
-            src={
-              'https://fhcznf55bc.ufs.sh/f/xBOsIwq3IZNgvmGZCQcnJ8kcASMhKDNE0Vly7aTGUo5f41pO'
-            }
-            className="heroAnimated"
-            alt="LumiHover animated"
-          />
-          <img
-            src={
-              'https://fhcznf55bc.ufs.sh/f/xBOsIwq3IZNgx3VFjIq3IZNgozUprDwMlXAWE5tQPbSFq6Om'
-            }
-            className="logoAnimatedSmall"
-            alt="Logo animated"
-          />
-        </div>
+        <iframe
+          className="logoAnimatedSmallFrame"
+          title="Logo animated"
+          src={logoSrc}
+        />
       </main>
     </>
   );
