@@ -1,7 +1,8 @@
 # LUMI Chrome Extension — Product & Architecture
 
 > Current implementation as of this repository state (MV3 + WXT + Preact + shared typed contracts).
-
+[press](https://canva.link/y0lilgh05xuby4x)
+[video](https://drive.google.com/drive/folders/1jgDtt_IKWFSajxGdiH37pvTaMpiNBQz7?usp=sharing)
 ---
 
 ## Product overview
