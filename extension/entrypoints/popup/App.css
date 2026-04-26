@@ -11,18 +11,32 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 18px;
+  justify-content: center;
+  gap: 16px;
 }
 
 .logoAnimatedSmall {
   width: 250px;
   height: auto;
 }
-.logoAnimatedSmallFrame {
-  width: 250px;
-  height: 250px;
+
+.primaryButton {
+  appearance: none;
   border: 0;
-  background: transparent;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+  color: #0b0b0b;
+  background: #f2f2f2;
+}
+
+.primaryButton:hover {
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.18));
+}
+
+.primaryButton:active {
+  transform: translateY(1px);
 }
 
 @keyframes lumi-bounce {

@@ -9,5 +9,12 @@ export default defineConfig({
       extension_pages:
         "script-src 'self'; object-src 'self'; img-src 'self' data: https://utfs.io https://*.ufs.sh; frame-src https://utfs.io https://*.ufs.sh;",
     },
+    // Allow content scripts (web pages) to load packaged GIF assets via `browser.runtime.getURL`.
+    web_accessible_resources: [
+      {
+        resources: ['gifs/*.gif'],
+        matches: ['<all_urls>'],
+      },
+    ],
   },
 });

@@ -15,11 +15,68 @@ import {
 } from '@shared';
 
 const LUMI_OVERLAY_ID = 'lumihover-overlay-root';
+const RISK_OVERLAY_ID = 'lumihover-risk-overlay-root';
 
-const HERO_STILL_URL =
-  'https://fhcznf55bc.ufs.sh/f/xBOsIwq3IZNgvmGZCQcnJ8kcASMhKDNE0Vly7aTGUo5f41pO';
-const HERO_ANIMATED_URL =
-  'https://fhcznf55bc.ufs.sh/f/xBOsIwq3IZNgvmGZCQcnJ8kcASMhKDNE0Vly7aTGUo5f41pO';
+const HERO_IDLE_GIF_PATH = '/gifs/hero-idle.gif' as const;
+const HERO_HOVER_GIF_PATH = '/gifs/hero-hover.gif' as const;
+
+const RISK_MEDIUM_GIF_PATH = '/gifs/risk-medium.gif' as const;
+const RISK_HIGH_GIF_PATH = '/gifs/risk-high.gif' as const;
+
+const RISK_OVERLAY_MIN_INTERVAL_MS = 8_000;
+let lastRiskOverlayAt = 0;
+
+const showRiskOverlay = (riskLevel: RiskLevel): void => {
+  if (riskLevel !== 'MEDIUM' && riskLevel !== 'HIGH') {
+    return;
+  }
+
+  const now = Date.now();
+  if (now - lastRiskOverlayAt < RISK_OVERLAY_MIN_INTERVAL_MS) {
+    return;
+  }
+  lastRiskOverlayAt = now;
+
+  const existing = document.getElementById(RISK_OVERLAY_ID);
+  existing?.remove();
+
+  const root = document.createElement('div');
+  root.id = RISK_OVERLAY_ID;
+  root.style.position = 'fixed';
+  root.style.inset = '0';
+  root.style.display = 'grid';
+  root.style.placeItems = 'center';
+  root.style.pointerEvents = 'none';
+  root.style.zIndex = '2147483647';
+
+  const img = document.createElement('img');
+  img.alt = riskLevel === 'HIGH' ? 'High risk' : 'Medium risk';
+  img.style.width = '260px';
+  img.style.height = 'auto';
+  img.style.display = 'block';
+
+  const srcPath = riskLevel === 'HIGH' ? RISK_HIGH_GIF_PATH : RISK_MEDIUM_GIF_PATH;
+  // WXT types `getURL` to only accept known public paths.
+  // We keep paths centralized above and cast here.
+  img.src = browser.runtime.getURL(srcPath as any);
+
+  root.appendChild(img);
+  document.documentElement.appendChild(root);
+
+  // Grow + fade, then remove
+  const anim = img.animate(
+    [
+      { transform: 'scale(0.65)', opacity: 0 },
+      { transform: 'scale(1.15)', opacity: 1, offset: 0.55 },
+      { transform: 'scale(1.0)', opacity: 1 },
+    ],
+    { duration: 900, easing: 'cubic-bezier(0.2, 0.9, 0.2, 1)', fill: 'forwards' },
+  );
+
+  anim.addEventListener('finish', () => {
+    window.setTimeout(() => root.remove(), 1400);
+  });
+};
 
 const mountLumiOverlay = (): void => {
   if (document.getElementById(LUMI_OVERLAY_ID)) {
@@ -29,26 +86,25 @@ const mountLumiOverlay = (): void => {
   const root = document.createElement('div');
   root.id = LUMI_OVERLAY_ID;
   root.style.position = 'fixed';
-  root.style.right = '16px';
-  root.style.bottom = '16px';
+  // Very tight to the viewport edge (outside the extension popup)
+  root.style.right = '4px';
+  root.style.bottom = '4px';
   root.style.zIndex = '2147483647';
   root.style.pointerEvents = 'none';
 
-  const heroFrame = document.createElement('iframe');
-  heroFrame.title = 'LumiHover';
-  heroFrame.style.width = '220px';
-  heroFrame.style.height = '220px';
-  heroFrame.style.border = '0';
-  heroFrame.style.background = 'transparent';
-  heroFrame.style.pointerEvents = 'auto';
-  heroFrame.style.userSelect = 'none';
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (heroFrame.style as any).webkitUserSelect = 'none';
-  heroFrame.style.cursor = 'pointer';
+  const hero = document.createElement('img');
+  hero.alt = 'LumiHover';
+  hero.style.width = '220px';
+  hero.style.height = 'auto';
+  hero.style.pointerEvents = 'auto';
+  hero.style.userSelect = 'none';
+  hero.style.webkitUserSelect = 'none';
+  hero.style.cursor = 'pointer';
+  hero.style.display = 'block';
 
   // Hover bounce (CSS-like) using WAAPI so we don't need to inject styles.
   const bounce = () =>
-    heroFrame.animate(
+    hero.animate(
       [
         { transform: 'translateY(0px)' },
         { transform: 'translateY(-8px)' },
@@ -58,28 +114,23 @@ const mountLumiOverlay = (): void => {
     );
 
   let hoverAnimation: Animation | null = null;
-  let hoverNonce = 0;
+  const idleUrl = browser.runtime.getURL(HERO_IDLE_GIF_PATH as any);
+  const hoverUrl = browser.runtime.getURL(HERO_HOVER_GIF_PATH as any);
 
-  const setHeroSrc = (baseUrl: string) => {
-    hoverNonce += 1;
-    heroFrame.src = `${baseUrl}?h=${hoverNonce}`;
-  };
+  hero.src = idleUrl;
 
-  // Default: still
-  setHeroSrc(HERO_STILL_URL);
-
-  heroFrame.addEventListener('mouseenter', () => {
-    setHeroSrc(HERO_ANIMATED_URL);
+  hero.addEventListener('mouseenter', () => {
+    hero.src = hoverUrl;
     hoverAnimation = bounce();
   });
 
-  heroFrame.addEventListener('mouseleave', () => {
+  hero.addEventListener('mouseleave', () => {
     hoverAnimation?.cancel();
     hoverAnimation = null;
-    setHeroSrc(HERO_STILL_URL);
+    hero.src = idleUrl;
   });
 
-  root.appendChild(heroFrame);
+  root.appendChild(hero);
   document.documentElement.appendChild(root);
 };
 
@@ -374,6 +425,7 @@ export default defineContentScript({
         truncated,
       });
 
+      showRiskOverlay(riskLevel);
       maybeEscalate(payload, source);
 
       return { payload, truncated };

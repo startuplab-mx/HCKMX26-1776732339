@@ -1,24 +1,21 @@
-import { useMemo } from 'preact/hooks';
 import './App.css';
 
 function App() {
-  const logoAnimatedUrl =
-    'https://fhcznf55bc.ufs.sh/f/xBOsIwq3IZNgx3VFjIq3IZNgozUprDwMlXAWE5tQPbSFq6Om';
+  const logoSrc = '/gifs/logo.gif';
 
-  // Force the logo to "start fresh" on initial mount
-  const logoSrc = useMemo(
-    () => `${logoAnimatedUrl}?v=${Date.now()}`,
-    [logoAnimatedUrl],
-  );
+  const openParentalControls = () => {
+    // TODO: replace with your real parental controls destination
+    const url = 'https://families.google.com/familylink/';
+    void browser.tabs.create({ url });
+  };
 
   return (
     <>
       <main className="popup">
-        <iframe
-          className="logoAnimatedSmallFrame"
-          title="Logo animated"
-          src={logoSrc}
-        />
+        <img className="logoAnimatedSmall" src={logoSrc} alt="Logo animated" />
+        <button className="primaryButton" onClick={openParentalControls}>
+          Control parental
+        </button>
       </main>
     </>
   );
