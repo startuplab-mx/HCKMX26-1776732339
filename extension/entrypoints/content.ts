@@ -28,6 +28,7 @@ const HERO_IDLE_GIF_PATH = '/gifs/hero-idle.gif' as const;
 const HERO_HOVER_GIF_PATH = '/gifs/hero-hover.gif' as const;
 const HERO_DRAG_GIF_PATH = '/gifs/dancinLUMI.gif' as const;
 const HERO_ROT_GIF_PATH = '/gifs/rotLUMI.gif' as const;
+const HERO_ROT_REVERSE_GIF_PATH = '/gifs/rotREVERSE.gif' as const;
 
 const HERO_POS_STORAGE_KEY = 'lumihover.hero.pos.v1';
 
@@ -143,6 +144,7 @@ const mountLumiOverlay = (): void => {
   const hoverUrl = browser.runtime.getURL(HERO_HOVER_GIF_PATH as any);
   const dragUrl = browser.runtime.getURL(HERO_DRAG_GIF_PATH as any);
   const rotUrl = browser.runtime.getURL(HERO_ROT_GIF_PATH as any);
+  const rotReverseUrl = browser.runtime.getURL(HERO_ROT_REVERSE_GIF_PATH as any);
 
   hero.src = idleUrl;
 
@@ -161,7 +163,7 @@ const mountLumiOverlay = (): void => {
     rotAnimation = null;
   };
 
-  const rotLUMI = (nextSrc: string) => {
+  const rotTransition = (bridgeSrc: string, nextSrc: string) => {
     if (prefersReducedMotion()) {
       hero.src = nextSrc;
       return;
@@ -169,11 +171,11 @@ const mountLumiOverlay = (): void => {
 
     cancelRot();
 
-    // Use the dedicated rotLUMI GIF as a transition "bridge"
-    // between idle/hover states.
-    const transitionMs = 50;
+    // Use a dedicated transition GIF as a "bridge"
+    // between hero states.
+    const transitionMs = 77;
 
-    hero.src = rotUrl;
+    hero.src = bridgeSrc;
     rotAnimation = hero.animate([{ opacity: 0.85 }, { opacity: 1 }], {
       duration: transitionMs,
       easing: 'linear',
@@ -191,7 +193,7 @@ const mountLumiOverlay = (): void => {
 
   heroWrap.addEventListener('mouseenter', () => {
     if (isDragging) return;
-    rotLUMI(hoverUrl);
+    rotTransition(rotUrl, hoverUrl);
     hoverAnimation = bounce();
   });
 
@@ -199,7 +201,7 @@ const mountLumiOverlay = (): void => {
     if (isDragging) return;
     hoverAnimation?.cancel();
     hoverAnimation = null;
-    rotLUMI(idleUrl);
+    rotTransition(rotReverseUrl, idleUrl);
   });
 
   // Restore saved position (if any)
