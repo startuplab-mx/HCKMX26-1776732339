@@ -27,6 +27,7 @@ const RISK_OVERLAY_ID = 'lumihover-risk-overlay-root';
 const HERO_IDLE_GIF_PATH = '/gifs/hero-idle.gif' as const;
 const HERO_HOVER_GIF_PATH = '/gifs/hero-hover.gif' as const;
 const HERO_DRAG_GIF_PATH = '/gifs/dancinLUMI.gif' as const;
+const HERO_ROT_GIF_PATH = '/gifs/rotLUMI.gif' as const;
 
 const HERO_POS_STORAGE_KEY = 'lumihover.hero.pos.v1';
 
@@ -108,20 +109,25 @@ const mountLumiOverlay = (): void => {
   root.style.zIndex = '2147483647';
   root.style.pointerEvents = 'none';
 
+  const heroWrap = document.createElement('div');
+  heroWrap.style.display = 'block';
+  heroWrap.style.width = 'fit-content';
+  heroWrap.style.pointerEvents = 'auto';
+  heroWrap.style.userSelect = 'none';
+  (heroWrap.style as any).webkitUserSelect = 'none';
+  heroWrap.style.cursor = 'pointer';
+  heroWrap.style.touchAction = 'none';
+
   const hero = document.createElement('img');
   hero.alt = 'LumiHover';
   hero.style.width = '90px';
   hero.style.height = 'auto';
-  hero.style.pointerEvents = 'auto';
-  hero.style.userSelect = 'none';
-  hero.style.webkitUserSelect = 'none';
-  hero.style.cursor = 'pointer';
   hero.style.display = 'block';
-  hero.style.touchAction = 'none';
+  hero.style.pointerEvents = 'none';
 
   // Hover bounce (CSS-like) using WAAPI so we don't need to inject styles.
   const bounce = () =>
-    hero.animate(
+    heroWrap.animate(
       [
         { transform: 'translateY(0px)' },
         { transform: 'translateY(-8px)' },
@@ -131,25 +137,69 @@ const mountLumiOverlay = (): void => {
     );
 
   let hoverAnimation: Animation | null = null;
+  let rotAnimation: Animation | null = null;
+  let rotSwapTimer: number | null = null;
   const idleUrl = browser.runtime.getURL(HERO_IDLE_GIF_PATH as any);
   const hoverUrl = browser.runtime.getURL(HERO_HOVER_GIF_PATH as any);
   const dragUrl = browser.runtime.getURL(HERO_DRAG_GIF_PATH as any);
+  const rotUrl = browser.runtime.getURL(HERO_ROT_GIF_PATH as any);
 
   hero.src = idleUrl;
 
   let isDragging = false;
 
-  hero.addEventListener('mouseenter', () => {
+  const prefersReducedMotion = () =>
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const cancelRot = () => {
+    if (rotSwapTimer != null) {
+      window.clearTimeout(rotSwapTimer);
+      rotSwapTimer = null;
+    }
+    rotAnimation?.cancel();
+    rotAnimation = null;
+  };
+
+  const rotLUMI = (nextSrc: string) => {
+    if (prefersReducedMotion()) {
+      hero.src = nextSrc;
+      return;
+    }
+
+    cancelRot();
+
+    // Use the dedicated rotLUMI GIF as a transition "bridge"
+    // between idle/hover states.
+    const transitionMs = 50;
+
+    hero.src = rotUrl;
+    rotAnimation = hero.animate([{ opacity: 0.85 }, { opacity: 1 }], {
+      duration: transitionMs,
+      easing: 'linear',
+      fill: 'both',
+    });
+
+    rotSwapTimer = window.setTimeout(() => {
+      hero.src = nextSrc;
+    }, transitionMs);
+
+    rotAnimation.addEventListener('finish', () => {
+      cancelRot();
+    });
+  };
+
+  heroWrap.addEventListener('mouseenter', () => {
     if (isDragging) return;
-    hero.src = hoverUrl;
+    rotLUMI(hoverUrl);
     hoverAnimation = bounce();
   });
 
-  hero.addEventListener('mouseleave', () => {
+  heroWrap.addEventListener('mouseleave', () => {
     if (isDragging) return;
     hoverAnimation?.cancel();
     hoverAnimation = null;
-    hero.src = idleUrl;
+    rotLUMI(idleUrl);
   });
 
   // Restore saved position (if any)
@@ -169,12 +219,13 @@ const mountLumiOverlay = (): void => {
   }
 
   // Drag to reposition (pointer events)
-  hero.addEventListener('pointerdown', (e) => {
+  heroWrap.addEventListener('pointerdown', (e) => {
     isDragging = true;
     hoverAnimation?.cancel();
     hoverAnimation = null;
+    cancelRot();
     hero.src = dragUrl;
-    hero.setPointerCapture(e.pointerId);
+    heroWrap.setPointerCapture(e.pointerId);
 
     const rect = root.getBoundingClientRect();
     const startPointerX = e.clientX;
@@ -197,7 +248,7 @@ const mountLumiOverlay = (): void => {
 
     const onUp = (ev: PointerEvent) => {
       isDragging = false;
-      hero.releasePointerCapture(ev.pointerId);
+      heroWrap.releasePointerCapture(ev.pointerId);
 
       const finalRect = root.getBoundingClientRect();
       try {
@@ -220,7 +271,8 @@ const mountLumiOverlay = (): void => {
     window.addEventListener('pointercancel', onUp);
   });
 
-  root.appendChild(hero);
+  heroWrap.appendChild(hero);
+  root.appendChild(heroWrap);
   document.documentElement.appendChild(root);
 };
 
