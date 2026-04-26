@@ -58,7 +58,7 @@ const sendEscalationToBackend = async (
     totalScore: message.payload.totalScore,
   });
 
-  const backendUrl = normalizeBackendUrl(import.meta.env.VITE_BACKEND_URL);
+  const backendUrl = normalizeBackendUrl("https://amusing-contentment-production-4473.up.railway.app");
   if (!backendUrl) {
     console.warn('[escalation.config.missing]', {
       key: 'VITE_BACKEND_URL',

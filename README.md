@@ -1,20 +1,31 @@
-# LUMI Chrome Extension — Actual Architecture
+# LUMI Chrome Extension — Product & Architecture
 
 > Current implementation as of this repository state (MV3 + WXT + Preact + shared typed contracts).
 
 ---
 
+## Product overview
+
+LUMI is a child-safety browser assistant focused on reducing narco-recruitment risk for minors online, especially early signals tied to cartel grooming or coercion patterns. It also supports broader child online-safety monitoring as a secondary scope. The extension watches page text in real time, detects risky language patterns, and escalates relevant events for additional backend analysis. It is designed to be fail-open, so browsing remains uninterrupted while detection and escalation continue in the background. The current implementation includes local page analysis, local in-page nudges, and a backend enrichment pipeline that can classify interventions and summarize screenshots for higher-risk events.
+
+### AI contribution and human architecture ownership
+
+This repository includes code and documentation produced with Cursor-assisted AI workflows. AI was used to accelerate implementation tasks, iteration, and writing support. However, the architecture, system boundaries, product decisions, and technical direction were designed and approved by human contributors.
+
+AI/LLM outputs in this project are advisory and may be imperfect. They should not be treated as infallible safety decisions and must be reviewed in context with human judgment.
+
+---
+
 ## 1) What is implemented today
 
-LUMI is currently a **keyword/rule-based risk analyzer extension** that:
+LUMI is currently a **keyword/rule-based risk analyzer extension with backend enrichment** that:
 
 - Scans visible page text (`<all_urls>`) from a content script.
 - Scores detected risk indicators using local rule metadata (category, severity, confidence).
 - Escalates medium/high/critical findings to the backend through the background worker.
 - Optionally captures a screenshot for high-risk findings before sending the backend request.
+- Renders local in-page hero and nudge UI when risk conditions are met.
 - Returns an acknowledgment from background/backend transport, while local scanning continues fail-open.
-
-Important: the current codebase **does not implement in-page nudge rendering** yet. The popup exists, but it is still scaffold/demo UI.
 
 ---
 
@@ -47,14 +58,16 @@ Important: the current codebase **does not implement in-page nudge rendering** y
 ┌──────────────────────────────────────────────────────────────────────┐
 │ Backend (/analyze)                                                   │
 │  - receives EscalationBackendRequest                                 │
-│  - performs server-side analysis/handling                            │
-│  - responds with transport outcome consumed as EscalationAck         │
+│  - validates + normalizes + dedupes + policy checks                  │
+│  - optional classifier and screenshot vision summary                 │
+│  - async persistence + metrics/logging instrumentation               │
+│  - responds with EscalationAck (+ optional analysis fields)          │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3) Code map (real files)
+## 3) Code map
 
 ### Extension package (`extension/`)
 
@@ -63,7 +76,7 @@ Important: the current codebase **does not implement in-page nudge rendering** y
 - `entrypoints/background.ts`
   - Message listener + backend forwarding + optional screenshot capture.
 - `entrypoints/popup/*`
-  - Preact popup scaffold (currently demo assets/counter UI).
+  - Preact popup with a "Control parental" action opening an extension dashboard page.
 - `wxt.config.ts`
   - WXT config, including extension page CSP for remote image hosts.
 
@@ -75,6 +88,17 @@ Important: the current codebase **does not implement in-page nudge rendering** y
   - Category catalog + default severities + color mapping utilities.
 - `src/risk-indicators.ts`
   - Concrete keyword/hashtag/emoji rule set used by the analyzer.
+
+### Backend package (`backend/`)
+
+- `src/routes/analyze.ts`
+  - Request contract validation and full analyze pipeline orchestration.
+- `src/services/*`
+  - `normalize.ts`, `dedupe.ts`, `policy.ts`, `classifier.ts`, `vision.ts` for staged analysis/enrichment.
+- `src/db/*`
+  - Optional event persistence for escalation telemetry/history.
+- `src/observability/*`
+  - Structured logging and stage/error metrics.
 
 ---
 
@@ -128,12 +152,12 @@ Risk levels are derived from final score and severity presence:
 ### 4.5 Budgets, batching, and throttling
 
 - Analysis budgets:
-  - nominal budget metadata: `50ms`
-  - early-stop threshold: `40ms`
+  - nominal budget metadata: `80ms`
+  - early-stop threshold: `60ms`
   - per-batch text char cap: `14,000`
-- Mutation debounce: `120ms`.
+- Mutation debounce: `180ms`.
 - Initial scan chunking:
-  - max 140 text nodes per chunk
+  - max 150 text nodes per chunk
   - yields with `setTimeout(..., 0)` to stay responsive.
 - Escalation throttling:
   - fingerprint-based suppression window: `15s`.
@@ -222,7 +246,7 @@ Also shared:
 ## 7) End-to-end sequence (implemented)
 
 1. Content script boots on page and scans existing text in chunks.
-2. MutationObserver queues newly added nodes; flushes every 120ms.
+2. MutationObserver queues newly added nodes; flushes every 180ms.
 3. Analyzer normalizes text and matches against compiled indicator rules.
 4. It computes score + risk level + breakdowns + matched terms.
 5. If eligible, it generates a fingerprint and sends `ESCALATE`.
@@ -237,8 +261,8 @@ Also shared:
 
 The following items may exist in product vision docs, but are not implemented here:
 
-- In-page nudge overlay renderer/mounting flow.
-- Background-to-content `SHOW_NUDGE` message contract and UI reaction path.
+- Production-ready popup/dashboard data integration with analyzer outcomes.
+- Backend-to-content server-driven nudge contract wiring (`SHOW_NUDGE`) for runtime UI updates.
 - Parent notification/dashboard/Supabase realtime pipeline.
 - Persisted extension session UX linked to detection events.
 
@@ -248,11 +272,12 @@ The following items may exist in product vision docs, but are not implemented he
 
 - Extension networking requires `VITE_BACKEND_URL` configured at build/runtime.
 - Optional extension gate `VITE_ENABLE_BACKEND_NUDGE=true` enables consumption/logging of backend `analysis.nudge` fields.
-- Current popup is non-production scaffold and independent of analyzer state.
+- Current popup provides a launcher action and is still largely independent of analyzer runtime state.
 - Content script is intentionally fail-open: analysis continues even if backend calls fail.
 - CSP in `wxt.config.ts` currently permits `img-src` for UploadThing CDN hosts on extension pages.
-- Backend defaults to `PORT=3000` and supports `GET /health`, `POST /analyze`, and `GET /metrics`.
+- Backend defaults to `PORT=3001` and supports `GET /health`, `POST /analyze`, and `GET /metrics`.
 - Backend enrichment uses `OPENROUTER_API_KEY` (+ optional `LLM_MODEL` / `VISION_MODEL`) and optional persistence via `SUPABASE_URL` + `SUPABASE_ANON_KEY`.
+- Architecture and technical design are human-authored; AI tooling (Cursor) is used for implementation assistance.
 
 ---
 
@@ -260,8 +285,8 @@ The following items may exist in product vision docs, but are not implemented he
 
 If the goal is full LUMI behavior, next concrete additions would be:
 
-1. Add typed background->content message (`SHOW_NUDGE`) and content listener.
-2. Implement nudge renderer module with isolated styles and dedupe.
-3. Add local event persistence + popup state bound to analyzer outcomes.
-4. Add provider circuit-breaker state with temporary disable windows.
+1. Wire a typed background->content message (`SHOW_NUDGE`) path for server-driven nudges.
+2. Connect popup/dashboard UX to live analyzer events and persisted history.
+3. Add provider circuit-breaker state with temporary disable windows.
+4. Harden privacy controls and explicit retention policies for persisted escalation data.
 5. Add end-to-end load tests for enrichment latency and persistence durability.
