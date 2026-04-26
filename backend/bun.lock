@@ -5,7 +5,7 @@
     "": {
       "name": "backend",
       "dependencies": {
-        "@emmanuelbalderasb/shared-types": "file:../packages/shared-types",
+        "@emmanuelbalderasb/shared-types": "^0.1.0",
         "@supabase/supabase-js": "^2.57.4",
       },
       "devDependencies": {
@@ -17,7 +17,7 @@
     },
   },
   "packages": {
-    "@emmanuelbalderasb/shared-types": ["@emmanuelbalderasb/shared-types@file:../packages/shared-types", {}],
+    "@emmanuelbalderasb/shared-types": ["@emmanuelbalderasb/shared-types@0.1.0", "https://npm.pkg.github.com/download/@emmanuelbalderasb/shared-types/0.1.0/d5473589e27ff595c17a26c45d3d316c37869a5e", {}, "sha512-EkMBBNMHqR2pVIymrxbTRCy7S6PhOnvOAoNr9PgNo4mB9HH1Ivuwj858QQgnlrhhj/bSahpgva0Z8+9V1naadg=="],
 
     "@supabase/auth-js": ["@supabase/auth-js@2.104.1", "", { "dependencies": { "tslib": "2.8.1" } }, "sha512-pqFnDKekq1isqlqnzqzyJ3mzmho+o+FjfVTqhKY3PFlwj2anx3OPznO1kbo1ZEwD8zg1r4EAFf/7pplLyX0ocQ=="],
 

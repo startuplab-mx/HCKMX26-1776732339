@@ -10,7 +10,7 @@
     "typecheck": "bunx tsc --noEmit"
   },
   "dependencies": {
-    "@emmanuelbalderasb/shared-types": "file:../packages/shared-types",
+    "@emmanuelbalderasb/shared-types": "^0.1.0",
     "@supabase/supabase-js": "^2.57.4"
   },
   "devDependencies": {
