@@ -29,11 +29,18 @@ const HERO_HOVER_GIF_PATH = '/gifs/hero-hover.gif' as const;
 const HERO_DRAG_GIF_PATH = '/gifs/dancinLUMI.gif' as const;
 const HERO_ROT_GIF_PATH = '/gifs/rotLUMI.gif' as const;
 const HERO_ROT_REVERSE_GIF_PATH = '/gifs/rotREVERSE.gif' as const;
+const HERO_TALK_GREEN_GIF_PATH = '/gifs/talkGREEN.gif' as const;
+const HERO_TALK_ORANGE_GIF_PATH = '/gifs/talkORANGE.gif' as const;
+const HERO_TALK_RED_GIF_PATH = '/gifs/talkRED.gif' as const;
+const HERO_SAD_GIF_PATH = '/gifs/sadLUMI.gif' as const;
+const HERO_DANCE_GIF_PATH = '/gifs/dancinLUMI.gif' as const;
 
 const HERO_POS_STORAGE_KEY = 'lumihover.hero.pos.v1';
 
 const RISK_MEDIUM_GIF_PATH = '/gifs/risk-medium.gif' as const;
 const RISK_HIGH_GIF_PATH = '/gifs/risk-high.gif' as const;
+
+let onRiskSignal: ((payload: AnalysisPayload) => void) | null = null;
 
 const RISK_OVERLAY_MIN_INTERVAL_MS = 8_000;
 let lastRiskOverlayAt = 0;
@@ -118,6 +125,7 @@ const mountLumiOverlay = (): void => {
   (heroWrap.style as any).webkitUserSelect = 'none';
   heroWrap.style.cursor = 'pointer';
   heroWrap.style.touchAction = 'none';
+  heroWrap.style.position = 'relative';
 
   const hero = document.createElement('img');
   hero.alt = 'LumiHover';
@@ -145,14 +153,82 @@ const mountLumiOverlay = (): void => {
   const dragUrl = browser.runtime.getURL(HERO_DRAG_GIF_PATH as any);
   const rotUrl = browser.runtime.getURL(HERO_ROT_GIF_PATH as any);
   const rotReverseUrl = browser.runtime.getURL(HERO_ROT_REVERSE_GIF_PATH as any);
+  const talkGreenUrl = browser.runtime.getURL(HERO_TALK_GREEN_GIF_PATH as any);
+  const talkOrangeUrl = browser.runtime.getURL(HERO_TALK_ORANGE_GIF_PATH as any);
+  const talkRedUrl = browser.runtime.getURL(HERO_TALK_RED_GIF_PATH as any);
+  const sadUrl = browser.runtime.getURL(HERO_SAD_GIF_PATH as any);
+  const danceUrl = browser.runtime.getURL(HERO_DANCE_GIF_PATH as any);
 
   hero.src = idleUrl;
 
   let isDragging = false;
+  let interactionLocked = false;
+
+  const nudge = document.createElement('div');
+  nudge.style.position = 'absolute';
+  nudge.style.right = '92px';
+  nudge.style.bottom = '6px';
+  nudge.style.width = '260px';
+  nudge.style.maxWidth = 'min(260px, calc(100vw - 140px))';
+  nudge.style.padding = '10px 10px 10px';
+  nudge.style.borderRadius = '14px';
+  nudge.style.border = '1px solid rgba(198, 225, 227, 0.18)';
+  nudge.style.background = 'rgba(11, 11, 15, 0.92)';
+  (nudge.style as any).backdropFilter = 'blur(10px)';
+  nudge.style.boxShadow = '0 10px 30px rgba(0,0,0,0.35)';
+  nudge.style.color = '#C6E1E3';
+  nudge.style.fontFamily = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  nudge.style.pointerEvents = 'auto';
+  nudge.style.display = 'none';
+
+  const nudgeTitle = document.createElement('div');
+  nudgeTitle.style.fontWeight = '900';
+  nudgeTitle.style.fontSize = '12px';
+  nudgeTitle.style.letterSpacing = '0.08em';
+  nudgeTitle.style.textTransform = 'uppercase';
+  nudgeTitle.style.opacity = '0.9';
+
+  const nudgeText = document.createElement('div');
+  nudgeText.style.marginTop = '6px';
+  nudgeText.style.fontSize = '13px';
+  nudgeText.style.lineHeight = '1.25';
+
+  const nudgeActions = document.createElement('div');
+  nudgeActions.style.display = 'flex';
+  nudgeActions.style.gap = '8px';
+  nudgeActions.style.marginTop = '10px';
+  nudgeActions.style.justifyContent = 'flex-end';
+
+  const mkBtn = (label: string, variant: 'primary' | 'ghost') => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = label;
+    btn.style.fontSize = '12px';
+    btn.style.fontWeight = '800';
+    btn.style.borderRadius = '999px';
+    btn.style.padding = '8px 10px';
+    btn.style.cursor = 'pointer';
+    btn.style.border = variant === 'primary' ? '1px solid rgba(236,255,192,0.35)' : '1px solid rgba(198,225,227,0.22)';
+    btn.style.background = variant === 'primary' ? 'rgba(236,255,192,0.14)' : 'rgba(198,225,227,0.06)';
+    btn.style.color = variant === 'primary' ? '#ECFFC0' : '#C6E1E3';
+    btn.style.userSelect = 'none';
+    (btn.style as any).webkitUserSelect = 'none';
+    return btn;
+  };
+
+  const btnOk = mkBtn('Ok entiendo', 'primary');
+  const btnIgnore = mkBtn('Ignorar', 'ghost');
+
+  nudge.appendChild(nudgeTitle);
+  nudge.appendChild(nudgeText);
+  nudge.appendChild(nudgeActions);
+  heroWrap.appendChild(nudge);
 
   const prefersReducedMotion = () =>
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
   const cancelRot = () => {
     if (rotSwapTimer != null) {
@@ -192,13 +268,13 @@ const mountLumiOverlay = (): void => {
   };
 
   heroWrap.addEventListener('mouseenter', () => {
-    if (isDragging) return;
+    if (isDragging || interactionLocked) return;
     rotTransition(rotUrl, hoverUrl);
     hoverAnimation = bounce();
   });
 
   heroWrap.addEventListener('mouseleave', () => {
-    if (isDragging) return;
+    if (isDragging || interactionLocked) return;
     hoverAnimation?.cancel();
     hoverAnimation = null;
     rotTransition(rotReverseUrl, idleUrl);
@@ -222,6 +298,7 @@ const mountLumiOverlay = (): void => {
 
   // Drag to reposition (pointer events)
   heroWrap.addEventListener('pointerdown', (e) => {
+    if (interactionLocked) return;
     isDragging = true;
     hoverAnimation?.cancel();
     hoverAnimation = null;
@@ -276,6 +353,152 @@ const mountLumiOverlay = (): void => {
   heroWrap.appendChild(hero);
   root.appendChild(heroWrap);
   document.documentElement.appendChild(root);
+
+  // --- Risk nudges + hero choreography ---
+  const NUDGE_MIN_INTERVAL_MS = 10_000;
+  let lastNudgeAt = 0;
+  let sequenceId = 0;
+
+  const hideNudge = () => {
+    nudge.style.display = 'none';
+    nudgeActions.replaceChildren();
+  };
+
+  const showNudge = (opts: {
+    title: string;
+    text: string;
+    color: string;
+    showIgnore: boolean;
+    onOk: () => void;
+    onIgnore?: () => void;
+  }) => {
+    nudgeTitle.textContent = opts.title;
+    nudgeTitle.style.color = opts.color;
+    nudgeText.textContent = opts.text;
+    nudgeActions.replaceChildren();
+    btnOk.onclick = opts.onOk;
+    nudgeActions.appendChild(btnOk);
+    if (opts.showIgnore && opts.onIgnore) {
+      btnIgnore.onclick = opts.onIgnore;
+      nudgeActions.appendChild(btnIgnore);
+    }
+    nudge.style.display = 'block';
+  };
+
+  const setHero = (src: string) => {
+    cancelRot();
+    hero.src = src;
+  };
+
+  const formatMatchedTerms = (payload: AnalysisPayload): string => {
+    const top = [...payload.matchedTerms]
+      .sort((a, b) => b.scoreContribution - a.scoreContribution)
+      .slice(0, 4);
+
+    if (top.length === 0) return '';
+
+    const lines = top.map((t) => {
+      const sev = t.severity;
+      const count = t.count;
+      const v = t.matchedValue;
+      return `- ${v} (${sev}${typeof count === 'number' ? ` ×${count}` : ''})`;
+    });
+
+    return `\n\nSeñales detectadas:\n${lines.join('\n')}`;
+  };
+
+  const runSequence = async (payload: AnalysisPayload): Promise<void> => {
+    const now = Date.now();
+    if (now - lastNudgeAt < NUDGE_MIN_INTERVAL_MS) return;
+    lastNudgeAt = now;
+
+    const level: RiskLevel =
+      payload.riskLevel === 'CRITICAL' ? 'CRITICAL' : payload.riskLevel;
+    const terms = formatMatchedTerms(payload);
+
+    const myId = ++sequenceId;
+    interactionLocked = true;
+    isDragging = false;
+    hoverAnimation?.cancel();
+    hoverAnimation = null;
+    hideNudge();
+
+    const bailIfStale = () => myId !== sequenceId;
+
+    const okDanceThenIdle = async () => {
+      if (bailIfStale()) return;
+      hideNudge();
+      setHero(danceUrl);
+      await sleep(2600);
+      if (bailIfStale()) return;
+      setHero(idleUrl);
+      interactionLocked = false;
+    };
+
+    const ignoreSadThenIdle = async () => {
+      if (bailIfStale()) return;
+      hideNudge();
+      setHero(sadUrl);
+      await sleep(6200);
+      if (bailIfStale()) return;
+      setHero(idleUrl);
+      interactionLocked = false;
+    };
+
+    if (level === 'LOW') {
+      // Bounce + talkGREEN + nudge (ok/ignore)
+      hoverAnimation = bounce();
+      setHero(talkGreenUrl);
+      showNudge({
+        title: 'LOW RISK',
+        color: '#ECFFC0',
+        text:
+          `Detecté señales de posible riesgo o información engañosa en lo que estás viendo. Te recomiendo verificar la fuente antes de actuar.${terms}`,
+        showIgnore: true,
+        onOk: () => void okDanceThenIdle(),
+        onIgnore: () => void ignoreSadThenIdle(),
+      });
+      return;
+    }
+
+    if (level === 'MEDIUM') {
+      // Call attention first, then talkORANGE + nudge (ok/ignore) with action copy.
+      showRiskOverlay('MEDIUM');
+      await sleep(1000);
+      if (bailIfStale()) return;
+      hoverAnimation = bounce();
+      setHero(talkOrangeUrl);
+      showNudge({
+        title: 'MEDIUM RISK',
+        color: '#F88756',
+        text:
+          `Esto parece más riesgoso. Considera denunciar el contenido, bloquear al remitente y evitar compartir datos personales o pagos.${terms}`,
+        showIgnore: true,
+        onOk: () => void okDanceThenIdle(),
+        onIgnore: () => void ignoreSadThenIdle(),
+      });
+      return;
+    }
+
+    // HIGH / CRITICAL
+    showRiskOverlay('HIGH');
+    await sleep(1050);
+    if (bailIfStale()) return;
+    setHero(talkRedUrl);
+    showNudge({
+      title: level === 'CRITICAL' ? 'CRITICAL RISK' : 'HIGH RISK',
+      color: '#FF4D4D',
+      text:
+        `Riesgo alto detectado. Detén la interacción, no compartas información sensible y reporta/bloquea de inmediato si aplica.${terms}`,
+      showIgnore: false,
+      onOk: () => void okDanceThenIdle(),
+    });
+  };
+
+  onRiskSignal = (payload: AnalysisPayload) => {
+    if (payload.matchedTerms.length <= 0) return;
+    void runSequence(payload);
+  };
 };
 
 // Analysis settings
@@ -468,8 +691,12 @@ export default defineContentScript({
         truncated,
       });
 
-      showRiskOverlay(riskLevel);
+      if (riskLevel === 'MEDIUM' || riskLevel === 'HIGH') {
+        showRiskOverlay(riskLevel);
+      }
+      // CRITICAL uses the same overlay as HIGH (but handled in the nudge flow).
       maybeEscalate(payload, source);
+      onRiskSignal?.(payload);
 
       return { payload, truncated };
     };
